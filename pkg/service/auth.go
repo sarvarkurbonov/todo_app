@@ -3,7 +3,9 @@ package service
 import (
 	todo "Todo_rest_api"
 	"Todo_rest_api/pkg/repository"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -23,7 +25,11 @@ func NewAuthService(repo repository.Authorization) *AuthService {
 	return &AuthService{repo: repo}
 }
 func (s *AuthService) CreateUser(user todo.User) (int, error) {
-	user.Password = generatePasswordHash(user.Password)
+	hash, err := generatePasswordHash(user.Password)
+	if err != nil {
+		return 0, fmt.Errorf("invalid password: %w", err)
+	}
+	user.Password = hash
 	return s.repo.CreateUser(user)
 
 }
@@ -72,10 +78,13 @@ func (s *AuthService) ParseToken(accessToken string) (int, error) {
 	return claims.UserId, nil
 }
 
-func generatePasswordHash(password string) string {
+func generatePasswordHash(password string) (string, error) {
+	if strings.TrimSpace(password) == "" {
+		return "", errors.New("password is empty")
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "no password"
+		return "", fmt.Errorf("hash password: %w", err)
 	}
-	return string(hash)
+	return string(hash), nil
 }

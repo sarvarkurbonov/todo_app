@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS list_items;
+DROP TABLE IF EXISTS users_lists;
+DROP TABLE IF EXISTS todo_item;
+DROP TABLE IF EXISTS todo_list;
+DROP TABLE IF EXISTS users;

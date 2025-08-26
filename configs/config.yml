@@ -6,3 +6,6 @@ db:
    username: "postgres"
    dbName: "postgres"
    sslMode: "disable"
+
+REDIS_HOST: "localhost:6379"
+REDIS_PASSWORD: "CHANGE_ME"
