@@ -1,186 +1,194 @@
-Todo REST API (Go + Gin + Postgres + Redis)
+# **Todo REST API — GitHub Codespaces Ready**
 
-A minimal todo API with JWT auth, PostgreSQL storage, and Redis caching.
+A clean, minimal REST API built with **Go (Gin)**, **PostgreSQL**, **Redis**, and **JWT auth** — configured to run smoothly in **GitHub Codespaces**.
 
-Tech Stack
+---
 
-Go (Gin)
+## **Features**
+- **JWT authentication**: sign-up / sign-in
+- **Todo lists & items**: CRUD endpoints
+- **Redis caching** for item lookups
+- **Plain SQL migrations** (`migrations/`) — no ORM required
 
-PostgreSQL
+---
 
-Redis
+## **Run in GitHub Codespaces (Recommended)**
 
-Migrations: plain SQL (in migrations/)
+### **1) Open in Codespaces**
+- Click **Code → Codespaces → Create codespace on main**.
 
-Quick Start
-1) Configure database
+### **2) Set database password**
+Create a **`.env`** file in the project root:
+```
+DB_PASSWORD=12345678
+```
 
-Edit configs/config.yml (defaults shown):
+### **3) Start Postgres + Redis**
+If your compose file is named **`docker-compose.yml`**:
+```bash
+docker compose up --build -d db cache
+```
+If it’s **`Docker-compose.yml`** (capital D):
+```bash
+docker compose -f Docker-compose.yml up --build -d db cache
+```
 
+### **4) Apply the database migration (one-time)**
+```bash
+docker compose cp migrations/0001_init.up.sql db:/init.sql
+docker compose exec db psql -U postgres -d postgres -f /init.sql
+```
+> Re-run this step if you reset or recreate the Postgres volume.
+
+### **5) Configure the app for containers**
+Edit **`configs/config.yml`**:
+```yaml
 port: 8080
 
 db:
-  host: "localhost"    # set to "db" if using Docker
+  host: "db"      # IMPORTANT inside Docker/Codespaces
   port: "5432"
   username: "postgres"
   dbName: "postgres"
   sslMode: "disable"
+```
 
-
-Set DB password via .env (used at runtime):
-
-DB_PASSWORD=12345678
-
-2) Apply migrations (one time)
-
-Run the SQL file to create tables:
-
-Using psql:
-
-psql -h <db_host> -U postgres -d postgres -f migrations/0001_init.up.sql
-
-
-If you’re running Docker Compose and the Postgres service is named db:
-
-docker exec -i <db_container_name> psql -U postgres -d postgres < migrations/0001_init.up.sql
-
-
-If you ever need to drop everything:
-
-psql -h <db_host> -U postgres -d postgres -f migrations/0001_init.down.sql
-
-3) Redis config
-
-Edit pkg/cache/redis.go.
-
-For local Redis: keep Addr: "localhost:6379", set Password.
-
-For Docker Compose (service name cache), change to:
-
+If Redis runs via Compose with service name **`cache`**, edit **`pkg/cache/redis.go`**:
+```go
 Addr:     "cache:6379",
-Password: "CHANGE_ME",
+Password: "CHANGE_ME", // match your compose password if set
+```
 
-4) Run
+### **6) Start the API**
+With **`docker-compose.yml`**:
+```bash
+docker compose up --build app
+```
+With **`Docker-compose.yml`**:
+```bash
+docker compose -f Docker-compose.yml up --build app
+```
+Codespaces will **auto-forward port 8080** → open it from the **PORTS** tab.
 
-Local (no Docker):
+---
 
+## **Alternative: Run without Docker (inside Codespaces)**
+1) Ensure Postgres + Redis are available in the environment.  
+2) Use `db.host: "localhost"` in `configs/config.yml` and `Addr: "localhost:6379"` in `pkg/cache/redis.go`.  
+3) Apply migration:
+```bash
+psql -h localhost -U postgres -d postgres -f migrations/0001_init.up.sql
+```
+4) Run:
+```bash
+go mod tidy
 go run ./cmd
+```
 
+---
 
-Docker Compose:
+## **API Summary**
 
-docker compose up --build
-# App → http://localhost:8080
+### **Auth**
+- **POST** `/auth/sign-up`  
+  ```json
+  { "name": "Alice", "username": "alice", "password": "secret" }
+  ```
+- **POST** `/auth/sign-in` → returns `{ "token": "JWT..." }`
 
-API
-Auth
+Use on protected routes:
+```
+Authorization: Bearer <JWT_TOKEN>
+```
 
-POST /auth/sign-up
-Body:
+### **Lists**
+- **POST** `/api/lists/` — create  
+- **GET** `/api/lists/` — list all  
+- **GET** `/api/lists/:id` — get by id  
+- **PUT** `/api/lists/:id` — update  
+  ```json
+  { "title": "New title", "description": "New desc" }
+  ```
+- **DELETE** `/api/lists/:id` — delete  
 
-{ "name": "Alice", "username": "alice", "password": "secret" }
+### **Items (under a list)**
+- **POST** `/api/lists/:id/items/` — create item in list  
+  ```json
+  { "title": "Milk", "description": "2L", "done": false }
+  ```
+- **GET**  `/api/lists/:id/items/` — all items in a list  
 
+### **Items (by id)**
+- **GET** `/api/items/:id`  
+- **PUT** `/api/items/:id`  
+  ```json
+  { "title": "Milk", "description": "1L", "done": true }
+  ```
+- **DELETE** `/api/items/:id`
 
-POST /auth/sign-in
-Body:
+---
 
-{ "username": "alice", "password": "secret" }
+## **cURL Examples**
 
+**Sign up**
+```bash
+curl -X POST http://localhost:8080/auth/sign-up   -H "Content-Type: application/json"   -d '{"name":"Alice","username":"alice","password":"secret"}'
+```
 
-Response:
+**Sign in**
+```bash
+curl -X POST http://localhost:8080/auth/sign-in   -H "Content-Type: application/json"   -d '{"username":"alice","password":"secret"}'
+```
 
-{ "token": "JWT_TOKEN_HERE" }
+**Create list (authorized)**
+```bash
+TOKEN=<paste JWT token>
+curl -X POST http://localhost:8080/api/lists/   -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{"title":"Groceries","description":"Weekend"}'
+```
 
+---
 
-Use the token for protected routes:
-Authorization: Bearer <JWT_TOKEN_HERE>
+## **Troubleshooting (Common in Codespaces)**
 
-Lists
+- **`dial tcp [::1]:5432: connect: connection refused`**  
+  The app is trying to reach Postgres on localhost inside Docker.  
+  **Fix:** set `db.host: "db"` in `configs/config.yml`.
 
-POST /api/lists/ – create list
-Body:
+- **`dial tcp: lookup redis on 127.0.0.11:53: no such host`**  
+  The code tries `redis`, but your service is named **`cache`**.  
+  **Fix:** set Redis address to `"cache:6379"` in `pkg/cache/redis.go`.
 
-{ "title": "Groceries", "description": "Weekend shopping" }
+- **`NOAUTH Authentication required.`**  
+  Redis requires a password you didn’t supply.  
+  **Fix:** set the same password in Compose **and** in `pkg/cache/redis.go`.
 
+- **`pq: relation "users" does not exist`**  
+  Tables not created yet.  
+  **Fix:** re-run the migration step in this README.
 
-GET /api/lists/ – list all
+---
 
-GET /api/lists/:id – get by id
-
-PUT /api/lists/:id – update
-Body (any field):
-
-{ "title": "New Title", "description": "New Desc" }
-
-
-DELETE /api/lists/:id
-
-Items (under a list)
-
-POST /api/lists/:id/items/ – add item to list
-Body:
-
-{ "title": "Milk", "description": "2L", "done": false }
-
-
-GET /api/lists/:id/items/ – get all items for a list
-
-Items (by id)
-
-GET /api/items/:id
-
-PUT /api/items/:id
-Body (any field):
-
-{ "title": "Milk", "description": "1L", "done": true }
-
-
-DELETE /api/items/:id
-
-Environment & Secrets
-
-DB password: from .env → DB_PASSWORD.
-
-JWT key (dev only): hardcoded in pkg/service/auth.go (signingKey = "asd234asd").
-Change it for production.
-
-Troubleshooting
-
-dial tcp [::1]:5432: connect: connection refused
-The app is trying to reach Postgres on localhost from inside Docker.
-Use the service name (db) in configs/config.yml when using Compose.
-
-dial tcp [::1]:6379: connect: connection refused or no such host redis
-Update Redis address:
-
-Local: localhost:6379
-
-Docker Compose: cache:6379
-
-NOAUTH Authentication required.
-Set the correct Redis password in pkg/cache/redis.go.
-
-pq: relation "users" does not exist
-Run the migration: migrations/0001_init.up.sql.
-
-Project Structure (short)
+## **Project Structure**
+```
 .
-├─ cmd/                 # main entry
-├─ configs/             # app config (viper)
-├─ migrations/          # SQL schema (up/down)
+├─ cmd/                    # main entry
+├─ configs/                # app config (viper)
+├─ migrations/             # SQL schema (up/down)
 ├─ pkg/
-│  ├─ cache/            # Redis client
-│  ├─ handler/          # HTTP handlers (Gin)
-│  ├─ repository/       # database/sql repositories
-│  └─ service/          # business logic (JWT, hashing, etc.)
-├─ todo.go              # Todo domain models
-├─ user.go              # User domain model
-└─ docker-compose.yml   # optional: run db/cache/app together
+│  ├─ cache/               # Redis client
+│  ├─ handler/             # HTTP handlers (Gin)
+│  ├─ repository/          # database/sql repositories
+│  └─ service/             # business logic (JWT, hashing)
+├─ todo.go                 # domain models
+├─ user.go                 # domain models
+└─ docker-compose.yml      # or Docker-compose.yml
+```
 
-Notes
+---
 
-Migrations are plain SQL and must be applied before using the API.
+## **Notes**
+- **JWT signing key** is hardcoded for dev in `pkg/service/auth.go` → **change for production**.
+- **Migrations** are plain SQL — apply them for every fresh database volume.
+- In Codespaces, use the **PORTS** tab to open **http://localhost:8080**.
 
-Redis is used to cache item lookups; adjust address/password to your setup.
-
-JWT TTL is 1 hour by default (see pkg/service/auth.go).
+**License:** MIT (or your choice)
